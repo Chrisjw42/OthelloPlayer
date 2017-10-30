@@ -1,18 +1,17 @@
 import time
 import game as g
 import numpy as np
+import dbGeneration as dbGen
 
 if __name__ == "__main__":
-    start = time.time()
-    print("Program Begin.")
+	print("Program Begin.")
+	start = time.time()
 
-    gb = g.GameBoard(None)
+	dbGen.establish_game_database()
 
-    g.play_game(gb)
-    '''
-    for i in np.ndenumerate(gb.state):
-        print (i[0])'''
-    #print(type(g.gameBoard))
+	"""
+	gb = g.GameBoard(None)
+	g.play_game(gb)
+	"""
 
-
-    print("Total time taken: %s sec" % round((time.time() - start), 10))
+	print("Total time taken: %s sec" % round((time.time() - start), 10))
