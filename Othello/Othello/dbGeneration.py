@@ -76,6 +76,13 @@ def _establish_game_database(override = False):
 	with open("data/gamedb.json", "w") as fp:
 		fp.write(json.dumps(games, indent=4))
 
+def convert_state_to_tensorformat(state):
+	state = state.reshape(64)
+	state[state == 0] = -1
+	state[np.isnan(state)] = 0
+
+	return state
+
 def get_tensorinputs_and_labels(forceNew = False):
 	if not os.path.isfile("data/gamedb.json"):
 		print("There is no Game DB")
@@ -91,28 +98,26 @@ def get_tensorinputs_and_labels(forceNew = False):
 		with open("data/gamedb.json") as fp:
 			db = json.load(fp)
 
-		for i in db.keys():
+		for i in list(db.keys()):
 			print(i)
-
 			thisGame = db[i]
-
 			boardStates = game.get_artificial_boards(thisGame["ListMoves"])
 
 			for i in boardStates:
-				tensorinputs.append(i)
+				tensorinputs.append(convert_state_to_tensorformat(i))
 				if thisGame["Winner"] == "Black":
 					labels.append(-1)
 				else:
 					labels.append(1)
 
 			# Only do it once
-			# break
+			#break
 		pickle.dump(tensorinputs, open("data/tensorinputs.p", "wb"))
 		pickle.dump(labels, open("data/labels.p", "wb"))
 	else:
 		tensorinputs = pickle.load(open("data/tensorinputs.p", "rb"))
 		labels = pickle.load(open("data/labels.p", "rb"))
 
-	print(len(tensorinputs))
+	print("Returned {} data points".format(len(tensorinputs)))
 	return tensorinputs, labels
 		

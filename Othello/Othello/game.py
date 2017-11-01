@@ -454,31 +454,20 @@ def get_artificial_boards(listMoves):
 	states = []
 	
 	for mv in listMoves:
-		#input = [ord(char) - 97 for char in input.lower()]
-		
-		#print("================ NEW MOVE")
-		#print(gb)
-		#print(mv)
-
 
 		mv = mv.lower()
 		# Convert "A8" input to [7,0] == [row, col]
 		mv = [int(mv[1]) - 1, ord(mv[0]) - 97]
-		#print(mv, int(whosTurn))
 
 		moves = get_available_moves(gb.state, whosTurn)
 		
 		if len(moves) == 0:
 			gb.whosTurn = not gb.whosTurn
 		else:
-			'''
-			for m in moves: 
-				print(m)
-			'''
-			#done = False
 			for move in moves:
 				if move[0] == mv:
 					gb.perform_move(move, whosTurn)
+					states.append(copy.deepcopy(gb.state))
 					whosTurn = not whosTurn
 					done = True
 					break
@@ -486,14 +475,8 @@ def get_artificial_boards(listMoves):
 				print(len(moves))
 				#print("PRBLEM - THIS INDICATES THAT THE PLAYER HAD NO MOVES TO MAKE, MUST IMPLEMENT 'SKIP MOVE' ")
 				print("PRBLEM")'''
-		states.append(gb.state)
+		
 	return states
-
-		
-		
-			
-
-		
 
 
 

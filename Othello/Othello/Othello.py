@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
 	#dbGen.establish_game_database()
 
-	ten, lbl = dbGen.get_tensorinputs_and_labels()
+	ten, lbl = dbGen.get_tensorinputs_and_labels(forceNew = True)
 
 	"""
 	gb = g.GameBoard(None)
