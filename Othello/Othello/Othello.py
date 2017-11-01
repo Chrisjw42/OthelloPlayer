@@ -7,7 +7,9 @@ if __name__ == "__main__":
 	print("Program Begin.")
 	start = time.time()
 
-	dbGen.establish_game_database()
+	#dbGen.establish_game_database()
+
+	ten, lbl = dbGen.get_tensorinputs_and_labels()
 
 	"""
 	gb = g.GameBoard(None)

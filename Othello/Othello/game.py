@@ -21,6 +21,7 @@ WALL_BONUS = 5
 CORNER_BONUS = 10
 EMPTY_CORNER_ADJACENCY_PENALTY = -7
 
+
 AXES = range(8)
 
 
@@ -61,8 +62,8 @@ class GameBoard(object):
 				i[j] = None
 
 		# Starting positions
-		self.state[3][3] = self.state[4][4] = 0
-		self.state[3][4] = self.state[4][3] = 1        
+		self.state[3][3] = self.state[4][4] = 1
+		self.state[3][4] = self.state[4][3] = 0        
 
 		return super().__init__()
 
@@ -88,8 +89,8 @@ class GameBoard(object):
 
 		for row in range(-1,8):
 			if row == -1:
-				for col in range(8):
-					boardPrint += "\t{}".format(col+1)
+				for col in ["A","B","C","D","E","F","G","H"]:
+					boardPrint += "\t{}".format(col)
 			else:
 				for col in range(8):
 					if col == 0:
@@ -333,7 +334,6 @@ def evaluate_state(state, whosTurn, availableMoves = None, print_messages = True
 
 	return myScore
 
-
 ### Functions declared outside of classs to keep gameBoard lightweight
 def who_wins(board):
 	num0 = 0
@@ -357,7 +357,6 @@ def who_wins(board):
 		print("We have a draw!")
 	input()
 	exit()
-
 
 def get_square_moves(row, col, state, whosTurn):
 	curSquare = np.array([row,col])
@@ -393,7 +392,6 @@ def get_square_moves(row, col, state, whosTurn):
 					steps = steps + 1
 					movingSquare = np.add(movingSquare, dir)
 
-					# BUG
 					# If moved out of range
 					if movingSquare[0] not in AXES or movingSquare[1] not in AXES:
 						break
@@ -408,6 +406,7 @@ def get_square_moves(row, col, state, whosTurn):
 						continue
 					elif movingContent == whosTurn:# Found friend to capture with
 						squareMoves.append((dir, steps))
+						break
 
 		except(IndexError):
 			continue
@@ -444,6 +443,74 @@ def select_move(availableMoves):
 	print("You have selected {}: {}".format(choice + 1, availableMoves[choice][0]))
 	return availableMoves[choice]
 
+def get_artificial_boards(listMoves):
+	"""
+	Artificially replay through a game, returning a board for every state in the game
+	
+	Returns: matrix of each turn of the game
+	"""
+	gb = GameBoard(None)
+	whosTurn = 0
+	states = []
+	
+	for mv in listMoves:
+		#input = [ord(char) - 97 for char in input.lower()]
+		
+		#print("================ NEW MOVE")
+		#print(gb)
+		#print(mv)
+
+
+		mv = mv.lower()
+		# Convert "A8" input to [7,0] == [row, col]
+		mv = [int(mv[1]) - 1, ord(mv[0]) - 97]
+		#print(mv, int(whosTurn))
+
+		moves = get_available_moves(gb.state, whosTurn)
+		
+		if len(moves) == 0:
+			gb.whosTurn = not gb.whosTurn
+		else:
+			'''
+			for m in moves: 
+				print(m)
+			'''
+			#done = False
+			for move in moves:
+				if move[0] == mv:
+					gb.perform_move(move, whosTurn)
+					whosTurn = not whosTurn
+					done = True
+					break
+			'''if done == False:
+				print(len(moves))
+				#print("PRBLEM - THIS INDICATES THAT THE PLAYER HAD NO MOVES TO MAKE, MUST IMPLEMENT 'SKIP MOVE' ")
+				print("PRBLEM")'''
+		states.append(gb.state)
+	return states
+
+		
+		
+			
+
+		
+
+
+
+		
+def convert_board_to_tensorinput(board):
+	tensorinput = board.state
+
+	for y in range(8):
+		for x in range(8):
+
+			# Black
+			if tensorinput[x, y] == 0:
+				tensorinput[x, y] = -1
+			# Not white (empty)
+			elif not tensorinput[x, y] == 1:
+				tensorinput[x, y] = 0
+	print(tensorinput)
 
 
 """

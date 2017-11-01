@@ -3,6 +3,9 @@ from bs4 import BeautifulSoup
 import requests
 import json
 import os
+import game 
+import pickle
+
 
 def _create_game_urls():
 	gameURLs = []
@@ -33,7 +36,7 @@ def _get_games():
 				# Convert the text to a string and get all the rows from it.
 				scoreBlack = soup.find_all("label", id="scoreBlack")[0].text
 				scoreWhite = soup.find_all("label", id="scoreWhite")[0].text
-				listMoves = soup.find_all(attrs={"name": "ListMoves"})[0]["value"]
+				listMoves = soup.find_all(attrs={"name": "ListMoves"})[0]["value"].strip()
 
 				games[gameURL] = {"ScoreBlack": scoreBlack,
 						 "ScoreWhite": scoreWhite,
@@ -46,7 +49,7 @@ def _get_games():
 			print("{} Failed".format(gameURL))
 	return games
 
-def establish_game_database(override = False):
+def _establish_game_database(override = False):
 	if not os.path.isfile("data/gamedb.json") or override:
 		with open("data/gamedb.json", "w") as fp:
 
@@ -72,3 +75,44 @@ def establish_game_database(override = False):
 	
 	with open("data/gamedb.json", "w") as fp:
 		fp.write(json.dumps(games, indent=4))
+
+def get_tensorinputs_and_labels(forceNew = False):
+	if not os.path.isfile("data/gamedb.json"):
+		print("There is no Game DB")
+		_establish_game_database()
+
+	# If the processing has not ben performed, or forcing new
+	if not os.path.isfile("data/tensorinputs.p") or not os.path.isfile("data/labels.p") or forceNew:
+		labels = []
+		tensorinputs = []
+		db = {}
+		# open db
+
+		with open("data/gamedb.json") as fp:
+			db = json.load(fp)
+
+		for i in db.keys():
+			print(i)
+
+			thisGame = db[i]
+
+			boardStates = game.get_artificial_boards(thisGame["ListMoves"])
+
+			for i in boardStates:
+				tensorinputs.append(i)
+				if thisGame["Winner"] == "Black":
+					labels.append(-1)
+				else:
+					labels.append(1)
+
+			# Only do it once
+			# break
+		pickle.dump(tensorinputs, open("data/tensorinputs.p", "wb"))
+		pickle.dump(labels, open("data/labels.p", "wb"))
+	else:
+		tensorinputs = pickle.load(open("data/tensorinputs.p", "rb"))
+		labels = pickle.load(open("data/labels.p", "rb"))
+
+	print(len(tensorinputs))
+	return tensorinputs, labels
+		
