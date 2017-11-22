@@ -2,8 +2,64 @@ import numpy as np
 import random
 import time
 import copy
-
 import collections
+
+import tensorflow as tf
+
+import dbGeneration as dbGen
+
+# Load CNN model (ai gameboard evaluation)
+sess = tf.Session()
+
+gameboards = tf.placeholder(tf.float32, (None, 100), name="gameBoards")
+gameboards2d = tf.reshape(gameboards, (-1, 10, 10, 1), name="gameBoards2d")
+
+# First Convulutional layer, small 2x2 filter
+conv1 = tf.layers.conv2d(gameboards2d, 64, 2, padding="same", name="Conv1", activation=tf.nn.relu)
+pool1 = tf.layers.max_pooling2d(conv1, 2, 2, name="Pool1")
+conv2 = tf.layers.conv2d(pool1, 128, 3, padding="same", name="Conv2", activation=tf.nn.relu)
+pool2 = tf.layers.max_pooling2d(conv2, 2, 2, name="Pool2")
+conv3 = tf.layers.conv2d(pool2, 128, 4, padding="same", name="Conv3", activation=tf.nn.relu)
+pool3 = tf.layers.max_pooling2d(conv3, 2, 2, name="Pool3")
+
+# Reshape the 2D tensor back to 1D to be fed into "Dense"
+# Flatten out the pooling - GET THIS NUMBER FROM POOLx.SHAPE
+pool2_flat = tf.reshape(pool3, (-1, int(1*1*128)), name="Pool2_Flat")
+
+# The dropout allows us to train a subset of the neurons at any given iteration.  
+keep_prob = tf.placeholder(tf.float32, name="Keep_Probability")
+
+# A dense layer with dropout
+# DENSE - a fully connected linear transofmration of every dimension of the data
+dense = tf.layers.dense(pool2_flat, int(128), activation=tf.nn.relu, name="Dense")
+
+# DROPOUT - if set to 0.5, rendomly select 50% of the neurons to ignore (different with each computation)
+dropout = tf.nn.dropout(dense, keep_prob, name="Dropout")
+
+dense2 = tf.layers.dense(dropout, int(128), activation=tf.nn.relu, name="Dense2")
+dropout2 = tf.nn.dropout(dense2, keep_prob, name="Dropout2")
+
+# A dense layer to classify the final values. Only 2 neurons. 
+predictions = tf.layers.dense(dropout2, 2, activation=None, name="Predictions")
+
+# None, as in, this is not yet defined, there could be any number of them input. 
+# 2, as in, there are two elements in the one-hot vector
+
+labels = tf.placeholder(tf.int32, [None, 2], name="labels")
+
+with tf.name_scope("Loss"):
+	loss = tf.reduce_mean(
+		tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=predictions))
+
+with tf.name_scope("Optimizer"):
+	train = tf.train.AdamOptimizer(learning_rate=0.001, name="Adam").minimize(loss)
+
+with tf.name_scope("Error"):
+	error = tf.reduce_mean(
+		tf.cast(tf.not_equal(tf.argmax(labels, 1), tf.argmax(predictions, 1)), tf.float32), name="Mean")
+
+saver = tf.train.Saver()
+saver.restore(sess, "nn_model\\")
 
 # 8 Directions
 UP = [-1,0]
@@ -23,8 +79,6 @@ EMPTY_CORNER_ADJACENCY_PENALTY = -7
 
 
 AXES = range(8)
-
-
 
 # Storing these manually is much cheaper comutationally that computing manhattan distance for every tile
 ##                          TOP-LEFT          BOTTOM-RIGHT      TOP-RIGHT         BOTTOM-LEFT          
@@ -108,7 +162,10 @@ class GameBoard(object):
 		return boardPrint
 
 
-def play_game(board):
+def play_game(board, maxSearchDepth = 3):
+	if maxSearchDepth == 1:
+		print("Warning, maxSearchDepth must be set to at least 2. Adjusting...")
+		maxSearchDepth = 2
 	print("Game Begin!")
 	playerOutOfMoves = False
 	aiOutOfMoves = False
@@ -144,23 +201,23 @@ def play_game(board):
 			else:
 				aiOutOfMoves = False
 			
-			print("Pre move eval:")
-			evaluate_state(board.state, board.whosTurn, moves)
+			#print("Pre move eval:")
+			#evaluate_state(board.state, board.whosTurn, moves)
 
-			# Choose random move
-			suggestedMove = select_move_minimax(board, 2)
+			suggestedMove = select_move_minimax(board, maxSearchDepth)
 			print("Suggested Move: ", suggestedMove)
 
 			#choice = random.randint(0, len(moves)-1)
 			#print("Choosing move at random")
 			board.perform_move(suggestedMove, board.whosTurn)
 			
-			print("Post move eval:")
-			evaluate_state(board.state, board.whosTurn, moves)
+			#print("Post move eval:")
+			#evaluate_state(board.state, board.whosTurn, moves)
 			
 		board.whosTurn = not board.whosTurn
 
 def select_move_minimax(board, maxDepth):
+	print("Selecting move with minimax")
 	def get_child_boards(board):
 		moves = get_available_moves(board.state, board.whosTurn)
 		child_boards = []
@@ -185,15 +242,23 @@ def select_move_minimax(board, maxDepth):
 	def evaluate_board_ab_pruning(board, alpha, beta):
 		#print("Depth: {}, Turn: {}".format(board.depth, board.whosTurn))
 		if board.depth == maxDepth:
-			print("d: {}, hit max Depth".format(board.depth, board.whosTurn))
+			#print("d: {}, hit max Depth".format(board.depth, board.whosTurn))
+			print(".", end='')
+			# OLD evaluation function - manual
+			#val = evaluate_state(board.state, board.whosTurn, print_messages = False)
 
-			val = evaluate_state(board.state, board.whosTurn, print_messages = False)
+			# NEW evaluation function - Convulutional Neural Network
+			val = evaluate_board_cnn(board)
+
 			return val 
 		else:
 			children = get_child_boards(board)
 			children_with_values = {}
 
-
+			# THIS NEEDS INSPECTING
+			# If there are no children available, simply evaluate this current board. 
+			if len(children) == 0:
+				return evaluate_board_cnn(board)
 
 			# JUST STARTED TO BEGIN a-B pruning implementation
 
@@ -220,6 +285,7 @@ def select_move_minimax(board, maxDepth):
 				return min(children_with_values.keys()), 
 
 	whosTurnMinimax = board.whosTurn
+
 	# Results[0] is the score, results[1] is the board
 	results = evaluate_board_ab_pruning(board, -999, 999)
 	print("EVAL SCORE:", results[0])
@@ -227,29 +293,30 @@ def select_move_minimax(board, maxDepth):
 	print(results)
 
 	# Check which of the available moves matches the minimax result (this is a turd way to do this, I am sorry)
-
-	#COULD INSTEAD JUST RETURN A BOARD THAT HAS ALREADY PERFORMED THE MOVE
-
 	moves = get_available_moves(board.state, board.whosTurn)
 
-	print("BEST MOVE: \n", results[1].state)
+	# This is the target state, this has been shown to be the best move. 
 	maskedTargetState = np.ma.array(results[1].state, mask=np.isnan(results[1].state))
 	maskedTargetState = np.ma.filled(maskedTargetState, 2)
-	#print("MASKED: \n", maskedTargetState)
 
+	# Check each move until finding the one that matches the best move
 	for m in moves:
 		b = copy.deepcopy(board)
 		b.perform_move(m, board.whosTurn)
 		
-		#print("checking move: \n", b.state)
-
 		maskedTestState = np.ma.array(b.state, mask=np.isnan(b.state))
 		maskedTestState = np.ma.filled(maskedTestState, 2)
+
 		# Mask the two arrays to ignore the Nan values. Allows comparison1
 		if np.ma.all(maskedTestState == maskedTargetState):
 			return m
 	
 def evaluate_state(state, whosTurn, availableMoves = None, print_messages = True):
+	"""
+	Hand-tuned state evaluation. 
+
+	This is/will be replaced by a deep CNN.
+	"""
 	start = time.time()
 	evalScore = 0
 
@@ -359,6 +426,11 @@ def who_wins(board):
 	exit()
 
 def get_square_moves(row, col, state, whosTurn):
+	"""
+	Analyse a given square, is this a valid move? If so, in which directions will pieces be taken?.
+	NOTE: This is the crux of the computational demand. This is a relatively expensive process to undertake, stepping along each direction.
+	The upside is that once this has been calculated, the results can just be referenced when the move is taken, it is only done once. 
+	"""
 	curSquare = np.array([row,col])
 	content = state[curSquare[0],curSquare[1]]
 
@@ -416,6 +488,9 @@ def get_square_moves(row, col, state, whosTurn):
 	return squareMoves
 
 def get_available_moves(state, whosTurn):
+	"""
+	Analyse the board and get a list of available moves.
+	"""
 	availableMoves = []
 	for row in range(8):
 		for col in range(8):
@@ -427,6 +502,9 @@ def get_available_moves(state, whosTurn):
 	return availableMoves
 
 def select_move(availableMoves):
+	"""
+	Interface: Allow the player to choose a move. 
+	"""
 	moveNumbers = range(len(availableMoves))
 
 	for i in moveNumbers:
@@ -443,7 +521,48 @@ def select_move(availableMoves):
 	print("You have selected {}: {}".format(choice + 1, availableMoves[choice][0]))
 	return availableMoves[choice]
 
-def get_artificial_boards(listMoves):
+def get_winner_and_scores(moveList):
+	gb = GameBoard(None)
+	whosTurn = 0
+	
+	for mv in moveList:
+		mv = mv.lower()
+		# Convert "A8" input to [7,0] == [row, col]
+		mv = [int(mv[1]) - 1, ord(mv[0]) - 97]
+
+		moves = get_available_moves(gb.state, whosTurn)
+		
+		if len(moves) == 0:
+			gb.whosTurn = not gb.whosTurn
+		else:
+			for move in moves:
+				if move[0] == mv:
+					gb.perform_move(move, whosTurn)
+					whosTurn = not whosTurn
+					break
+	# All moves performed
+	blackScore = 0
+	whiteScore = 0
+
+	for i in gb.state:
+		for j in i:
+			if j == 0:
+				blackScore = blackScore + 1
+			elif j == 1:
+				whiteScore = whiteScore + 1
+
+	if blackScore > whiteScore:
+		winner = "Black"
+	elif whiteScore > blackScore:
+		winner = "White"
+	else:
+		winner = "Draw"
+
+	return blackScore, whiteScore, winner
+
+
+
+def get_artificial_boards(listMoves, howManyStates):
 	"""
 	Artificially replay through a game, returning a board for every state in the game
 	
@@ -452,7 +571,11 @@ def get_artificial_boards(listMoves):
 	gb = GameBoard(None)
 	whosTurn = 0
 	states = []
+
+	# Pick n random turns to actually save from this game
+	turnsToSave = random.sample(range(0, len(listMoves)), howManyStates)
 	
+	counter = 0
 	for mv in listMoves:
 
 		mv = mv.lower()
@@ -467,7 +590,10 @@ def get_artificial_boards(listMoves):
 			for move in moves:
 				if move[0] == mv:
 					gb.perform_move(move, whosTurn)
-					states.append(copy.deepcopy(gb.state))
+					
+					# Only save this state if it is specified
+					if counter in turnsToSave:
+						states.append(copy.deepcopy(gb.state))
 					whosTurn = not whosTurn
 					done = True
 					break
@@ -475,26 +601,48 @@ def get_artificial_boards(listMoves):
 				print(len(moves))
 				#print("PRBLEM - THIS INDICATES THAT THE PLAYER HAD NO MOVES TO MAKE, MUST IMPLEMENT 'SKIP MOVE' ")
 				print("PRBLEM")'''
+		counter = counter + 1
 		
 	return states
 
+#def convert_board_to_tensorinput(board):
+#	tensorinput = board.state
+
+#	for y in range(8):
+#		for x in range(8):
+
+#			# Black
+#			if tensorinput[x, y] == 0:
+#				tensorinput[x, y] = -1
+#			# Not white (empty)
+#			elif not tensorinput[x, y] == 1:
+#				tensorinput[x, y] = 0
+#	return tensorinput
 
 
-		
-def convert_board_to_tensorinput(board):
-	tensorinput = board.state
 
-	for y in range(8):
-		for x in range(8):
+def evaluate_board_cnn(board):
+	"""
+	board.whosTurn encoding
+		0 = Black team
+		1 = White team
+	
+	result encoding (sorry)
+		[1,0] = White win
+		[0,1] = Black win
 
-			# Black
-			if tensorinput[x, y] == 0:
-				tensorinput[x, y] = -1
-			# Not white (empty)
-			elif not tensorinput[x, y] == 1:
-				tensorinput[x, y] = 0
-	print(tensorinput)
+	relevantIndex = 1 - board.whosTurn
+	enemyScoreIndex = board.whosTurn
+	""" # This is implied, and commented out for efficiency
 
+	tInput = np.reshape(dbGen.convert_state_to_tensorformat(board.state), (100))
+
+	r = sess.run(predictions, feed_dict={gameboards:[tInput], keep_prob:1.0})
+	# Take the prediction of a friendly win, and subtract the prediction for an enemy win
+	return r[0][1 - board.whosTurn] - r[0][board.whosTurn]
+
+#def initialise_model():
+	
 
 """
 # Note, this function utilises the maxDepth of the outer function (select_move_minimax)
